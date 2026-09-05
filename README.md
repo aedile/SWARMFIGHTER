@@ -2,7 +2,7 @@
 
 Namco's 1981 *Galaga*, running on a Fiesta medal.
 
-Like [PELLETINO](https://github.com/jesse-r-castro/PELLETINO) (Pac-Man) and
+Like [PELLETINO](https://github.com/aedile/PELLETINO) (Pac-Man) and
 [TRENCHRUNNER](https://github.com/aedile/TRENCHRUNNER) (Star Wars), this is an
 emulator of the original arcade board running the original ROM code on a
 Waveshare ESP32-C6-LCD-1.69, the $20 module the San Antonio Fiesta medal is
