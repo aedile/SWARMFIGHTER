@@ -1,0 +1,5 @@
+[mapping:emu]
+archive: libemu.a
+entries:
+    galaga (noflash)
+    Z80 (noflash)

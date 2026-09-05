@@ -21,7 +21,7 @@ static uint32_t frame_count;
 
 /* misc latch 0x6820-0x6827 */
 static uint8_t main_irq_en, sub_irq_en, sub2_nmi_en, subs_running;
-static uint8_t irq_pending[2];      /* vblank IRQ asserted, not yet taken */
+static uint8_t irq_pending[3];      /* vblank IRQ asserted, not yet taken (CPU3 uses NMI only) */
 
 /* 06XX */
 static uint8_t n06_ctrl;
@@ -41,23 +41,46 @@ static struct {
 
 static uint32_t halt_cycles[3];
 
+/* 256-byte page tables per CPU for direct memory (NULL = I/O or unmapped) */
+static const uint8_t *rpage[3][256];
+static uint8_t *wpage[256];
+
+static void map_init(void)
+{
+    memset(rpage, 0, sizeof(rpage));
+    memset(wpage, 0, sizeof(wpage));
+    for (int pg = 0; pg < 0x40; pg++) rpage[0][pg] = roms.rom_cpu1 + (pg << 8);
+    for (int pg = 0; pg < 0x10; pg++) { rpage[1][pg] = roms.rom_cpu2 + (pg << 8); rpage[2][pg] = roms.rom_cpu3 + (pg << 8); }
+    for (int c = 0; c < 3; c++) {
+        for (int pg = 0x80; pg < 0x88; pg++) rpage[c][pg] = ga_videoram + ((pg - 0x80) << 8);
+        for (int pg = 0x88; pg < 0x8c; pg++) rpage[c][pg] = ga_ram1 + ((pg - 0x88) << 8);
+        for (int pg = 0x90; pg < 0x94; pg++) rpage[c][pg] = ga_ram2 + ((pg - 0x90) << 8);
+        for (int pg = 0x98; pg < 0x9c; pg++) rpage[c][pg] = ga_ram3 + ((pg - 0x98) << 8);
+    }
+    for (int pg = 0x80; pg < 0x88; pg++) wpage[pg] = ga_videoram + ((pg - 0x80) << 8);
+    for (int pg = 0x88; pg < 0x8c; pg++) wpage[pg] = ga_ram1 + ((pg - 0x88) << 8);
+    for (int pg = 0x90; pg < 0x94; pg++) wpage[pg] = ga_ram2 + ((pg - 0x90) << 8);
+    for (int pg = 0x98; pg < 0x9c; pg++) wpage[pg] = ga_ram3 + ((pg - 0x98) << 8);
+}
+
+/* Idle loops the sub CPUs sit in between interrupts (verified in the ROMs):
+ *   CPU2 05B1: LD SP,$9100 / JP $05B1   (waits for the vblank IRQ)
+ *   CPU3 00B9: JR $                      (waits for the 05XX NMI) */
+static inline int in_idle_loop(int c, unsigned pc)
+{
+    if (c == 1) return pc >= 0x05b1 && pc <= 0x05b6;
+    if (c == 2) return pc == 0x00b9 || pc == 0x00ba;
+    return 0;
+}
+
 /* ---- Z80 callbacks (the core has global callbacks; cur_cpu selects the ROM) ---- */
 static uint8_t n51_read(void);
 static void n51_write(uint8_t d);
 
 byte RdZ80(register word a)
 {
-    if (a < 0x4000) {
-        switch (cur_cpu) {
-            case 0: return roms.rom_cpu1[a];
-            case 1: return (a < 0x1000) ? roms.rom_cpu2[a] : 0xff;
-            default: return (a < 0x1000) ? roms.rom_cpu3[a] : 0xff;
-        }
-    }
-    if (a >= 0x8000 && a < 0x8800) return ga_videoram[a - 0x8000];
-    if (a >= 0x8800 && a < 0x8c00) return ga_ram1[a - 0x8800];
-    if (a >= 0x9000 && a < 0x9400) return ga_ram2[a - 0x9000];
-    if (a >= 0x9800 && a < 0x9c00) return ga_ram3[a - 0x9800];
+    const uint8_t *p = rpage[cur_cpu][a >> 8];
+    if (p) return p[a & 0xff];
     if (a >= 0x6800 && a < 0x6808) {
         int off = a & 7;
         return ((dswb >> off) & 1) | (((dswa >> off) & 1) << 1);
@@ -74,10 +97,8 @@ byte RdZ80(register word a)
 
 void WrZ80(register word a, register byte d)
 {
-    if (a >= 0x8000 && a < 0x8800) { ga_videoram[a - 0x8000] = d; return; }
-    if (a >= 0x8800 && a < 0x8c00) { ga_ram1[a - 0x8800] = d; return; }
-    if (a >= 0x9000 && a < 0x9400) { ga_ram2[a - 0x9000] = d; return; }
-    if (a >= 0x9800 && a < 0x9c00) { ga_ram3[a - 0x9800] = d; return; }
+    uint8_t *p = wpage[a >> 8];
+    if (p) { p[a & 0xff] = d; return; }
     if (a >= 0x6800 && a < 0x6820) { ga_wsg_write(a & 0x1f, d); return; }
     if (a >= 0x6820 && a < 0x6828) {
         int bit = a & 7, v = d & 1;
@@ -226,6 +247,7 @@ static uint8_t n51_read(void)
 void ga_init(const ga_roms_t *r)
 {
     roms = *r;
+    map_init();
     ga_video_init(&roms);
     ga_wsg_init(roms.prom_wave);
     ga_n54_init();
@@ -265,8 +287,8 @@ static void run_cpu(int i, int32_t cycles)
     cycles -= debt[i];
     debt[i] = 0;
     if (cycles <= 0) { debt[i] = -cycles; return; }
-    if (cpu[i].IFF & IFF_HALT) {           /* nothing to do until an interrupt */
-        halt_cycles[i] += cycles;
+    if ((cpu[i].IFF & IFF_HALT) || (in_idle_loop(i, cpu[i].PC.W) && !irq_pending[i])) {
+        halt_cycles[i] += cycles;          /* nothing observable until the next interrupt */
         return;
     }
     cur_cpu = i;

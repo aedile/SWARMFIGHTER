@@ -1,0 +1,37 @@
+SWARMFIGHTER is released under the Zero-Clause BSD license (0BSD): no
+attribution, no notice preservation, no conditions.
+
+That covers the code written for this project: everything under main/, host/,
+tools/, components/audio_hal, components/display, components/imu, and the files
+core/galaga.c, core/galaga.h, core/galaga_internal.h, core/galaga_video.c,
+core/galaga_sound.c.
+
+Two things carry their own terms, listed in THIRD_PARTY_NOTICES.md:
+
+  * core/z80/ is Marat Fayzullin's portable Z80 emulator. It is free for
+    non-commercial use only and may not be distributed commercially. A build
+    of this project therefore inherits that restriction.
+  * The starfield, sprite, tilemap and custom-chip behavior are written from
+    MAME's documentation and code (BSD-3-Clause), which requires the notice to
+    be kept.
+
+The Galaga ROM images are not part of this project and are not licensed by
+it. They remain the property of their copyright holders.
+
+----------------------------------------------------------------------------
+
+Zero-Clause BSD
+===============
+
+Copyright (C) 2026 Jesse Castro
+
+Permission to use, copy, modify, and/or distribute this software for any
+purpose with or without fee is hereby granted.
+
+THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH
+REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY
+AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY SPECIAL, DIRECT,
+INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM
+LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR
+OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
+PERFORMANCE OF THIS SOFTWARE.
