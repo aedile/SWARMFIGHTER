@@ -13,7 +13,7 @@
 #include "render.h"
 #include "input.h"
 #include "audio_hal.h"
-#include "launcher_handback.h"
+#include "medalboot.h"
 
 static const char *TAG = "SWARM";
 #define DEBUG_LOG 1
@@ -23,7 +23,11 @@ extern "C" void app_main(void)
 {
     /* Before anything else: if we were chain-booted from the menu, make sure the
      * next reset goes back to it rather than here. */
-    launcher_handback();
+    /*
+     * FIRST LINE, before anything that can fail: point the boot partition back at the MINIMAME
+     * launcher, so a panic or a brownout lands in the menu instead of boot-looping.
+     */
+    medalboot_game_startup();
 
 #if !DEBUG_LOG
     esp_log_level_set("*", ESP_LOG_NONE);
@@ -46,6 +50,7 @@ extern "C" void app_main(void)
     render_init();
     input_init();
     audio_init();
+    medalboot_game_running();   /* far enough in to be sure this image works */
     ESP_LOGI(TAG, "ready, free heap %lu", (unsigned long)esp_get_free_heap_size());
 
     int64_t last_us = esp_timer_get_time(), last_report = last_us, owed_us = 0;
